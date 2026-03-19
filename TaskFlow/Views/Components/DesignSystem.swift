@@ -125,7 +125,7 @@ struct ProgressRow: View {
                         .foregroundColor(hit ? DS.green : color)
                     Text("/ \(goal) days")
                         .font(.system(size: 12)).foregroundColor(DS.text3)
-                    if hit { Text("✓").font(.system(size: 11, weight: .semibold)).foregroundColor(DS.green) }
+                    if hit { Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundColor(DS.green) }
                 }
             }
             GeometryReader { geo in

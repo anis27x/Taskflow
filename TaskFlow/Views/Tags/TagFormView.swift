@@ -16,7 +16,7 @@ struct TagFormView: View {
         NavigationStack {
             Form {
                 Section("Name") {
-                    TextField("e.g. Workout 🏋️", text: $name)
+                    TextField("e.g. Workout, Work, Health", text: $name)
                 }
                 Section("Color") {
                     LazyVGrid(columns: Array(repeating: .init(.flexible()), count: 5), spacing: DS.sp12) {

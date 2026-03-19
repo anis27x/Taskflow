@@ -17,9 +17,7 @@ final class AppStore: ObservableObject {
 
     // MARK: - Boot
 
-    init() {
-        loadLocal()
-    }
+    init() { loadLocal() }
 
     // MARK: - Local persistence
 
@@ -57,9 +55,7 @@ final class AppStore: ObservableObject {
 
     // MARK: - Tags
 
-    func addTag(_ t: TFTag) {
-        tags.append(t); persist()
-    }
+    func addTag(_ t: TFTag) { tags.append(t); persist() }
 
     func updateTag(_ t: TFTag) {
         if let i = tags.firstIndex(where: { $0.id == t.id }) { tags[i] = t }
@@ -75,8 +71,7 @@ final class AppStore: ObservableObject {
 
     func addSubtag(_ s: TFSubtag, to tagId: String) {
         guard let i = tags.firstIndex(where: { $0.id == tagId }) else { return }
-        tags[i].subtags.append(s)
-        persist()
+        tags[i].subtags.append(s); persist()
     }
 
     func deleteSubtag(subId: String, tagId: String) {
@@ -105,34 +100,31 @@ final class AppStore: ObservableObject {
              }
     }
 
-    func addTask(_ t: TFTask) {
-        tasks.append(t); persist()
-    }
+    func addTask(_ t: TFTask)    { tasks.append(t); persist() }
 
     func updateTask(_ t: TFTask) {
         if let i = tasks.firstIndex(where: { $0.id == t.id }) { tasks[i] = t }
         persist()
     }
 
-    func deleteTask(_ t: TFTask) {
-        tasks.removeAll { $0.id == t.id }; persist()
-    }
+    func deleteTask(_ t: TFTask) { tasks.removeAll { $0.id == t.id }; persist() }
 
-    func toggleDone(_ t: TFTask) {
-        var x = t; x.isDone.toggle(); updateTask(x)
-    }
+    func toggleDone(_ t: TFTask) { var x = t; x.isDone.toggle(); updateTask(x) }
 
     // MARK: - Goals
+    // TFGoal in Models.swift: id, tagId (String), weekly, monthly, yearly (Int?)
 
     func goalFor(tagId: String) -> TFGoal? { goals.first { $0.tagId == tagId } }
 
     func upsertGoal(tagId: String, weekly: Int?, monthly: Int?, yearly: Int?) {
         if let i = goals.firstIndex(where: { $0.tagId == tagId }) {
-            goals[i].weekly = weekly; goals[i].monthly = monthly; goals[i].yearly = yearly
+            goals[i].weekly  = weekly
+            goals[i].monthly = monthly
+            goals[i].yearly  = yearly
             persist()
         } else {
-            let g = TFGoal(tagId: tagId, weekly: weekly, monthly: monthly, yearly: yearly)
-            goals.append(g); persist()
+            goals.append(TFGoal(tagId: tagId, weekly: weekly, monthly: monthly, yearly: yearly))
+            persist()
         }
     }
 
@@ -148,9 +140,9 @@ final class AppStore: ObservableObject {
 
     func weekDates() -> [String] {
         let cal = Calendar.current; let now = Date()
-        let wd = cal.component(.weekday, from: now)
-        let offset = wd == 1 ? -6 : -(wd - 2)
-        let mon = cal.date(byAdding: .day, value: offset, to: now)!
+        let wd  = cal.component(.weekday, from: now)
+        let off = wd == 1 ? -6 : -(wd - 2)
+        let mon = cal.date(byAdding: .day, value: off, to: now)!
         let fmt = DateFormatter(); fmt.dateFormat = "yyyy-MM-dd"
         return (0..<7).map { fmt.string(from: cal.date(byAdding: .day, value: $0, to: mon)!) }
     }
@@ -166,7 +158,7 @@ final class AppStore: ObservableObject {
     func yearDates(_ year: Int) -> [String] {
         let fmt = DateFormatter(); fmt.dateFormat = "yyyy-MM-dd"
         let cal = Calendar.current
-        guard let jan1 = cal.date(from: DateComponents(year: year, month: 1, day: 1)),
+        guard let jan1  = cal.date(from: DateComponents(year: year, month: 1, day: 1)),
               let dec31 = cal.date(from: DateComponents(year: year, month: 12, day: 31)) else { return [] }
         var dates: [String] = []; var d = jan1
         while d <= dec31 { dates.append(fmt.string(from: d)); d = cal.date(byAdding: .day, value: 1, to: d)! }

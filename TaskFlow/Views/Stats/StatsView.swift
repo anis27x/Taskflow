@@ -112,7 +112,7 @@ struct StatsView: View {
         }
         .background(DS.bg)
         .navigationTitle("Stats")
-        .onChange(of: period) { _ in offset = 0 }
+        .onChange(of: period) { offset = 0 }
     }
 
     // MARK: - Heatmap

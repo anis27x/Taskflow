@@ -1,17 +1,56 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Backup data types
+// Declared at file scope (not inside any @MainActor type) so Codable conformances
+// are fully nonisolated and can be used by FileDocument without warnings.
+
+struct BackupSnapshot: Codable {
+    var tags:       [TFTag]
+    var tasks:      [TFTask]
+    var goals:      [TFGoal]
+    var exportedAt: Date   = Date()
+    var appVersion: String = "1.0"
+}
+
+struct BackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+
+    var snapshot: BackupSnapshot
+
+    init(snapshot: BackupSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        self.snapshot = try decoder.decode(BackupSnapshot.self, from: data)
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting    = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(snapshot)
+        return FileWrapper(regularFileWithContents: data)
+    }
+}
+
 // MARK: - Backup View
 
 struct BackupView: View {
     @EnvironmentObject var store: AppStore
 
-    @State private var showExporter   = false
-    @State private var showImporter   = false
+    @State private var showExporter      = false
+    @State private var showImporter      = false
     @State private var showImportConfirm = false
-    @State private var pendingImport: BackupDocument? = nil
+    @State private var pendingImport: BackupSnapshot? = nil
+    @State private var exportSnapshot:  BackupSnapshot? = nil
     @State private var toast: ToastMessage? = nil
-    @State private var exportDoc: BackupDocument? = nil
 
     var body: some View {
         ScrollView {
@@ -45,9 +84,13 @@ struct BackupView: View {
                             .foregroundColor(DS.text3)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-
                     Button {
-                        exportDoc = BackupDocument(store: store)
+                        // Capture data on main thread before FileDocument takes over
+                        exportSnapshot = BackupSnapshot(
+                            tags:  store.tags,
+                            tasks: store.tasks,
+                            goals: store.goals
+                        )
                         showExporter = true
                     } label: {
                         HStack(spacing: DS.sp8) {
@@ -76,11 +119,10 @@ struct BackupView: View {
                         Text("Restore from a backup file")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundColor(DS.text)
-                        Text("Pick a previously exported TaskFlow JSON file. Your current data will be replaced with the backup.")
+                        Text("Pick a previously exported TaskFlow JSON file. Your current data will be replaced.")
                             .font(.system(size: 13))
                             .foregroundColor(DS.text3)
                             .fixedSize(horizontal: false, vertical: true)
-
                         HStack(spacing: DS.sp8) {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 11))
@@ -94,10 +136,7 @@ struct BackupView: View {
                         .background(Color(hex: "#EA580C").opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: DS.r6))
                     }
-
-                    Button {
-                        showImporter = true
-                    } label: {
+                    Button { showImporter = true } label: {
                         HStack(spacing: DS.sp8) {
                             Image(systemName: "arrow.down.doc")
                                 .font(.system(size: 14, weight: .medium))
@@ -109,7 +148,8 @@ struct BackupView: View {
                         .padding(.vertical, DS.sp12)
                         .background(DS.accentBg)
                         .clipShape(RoundedRectangle(cornerRadius: DS.r8))
-                        .overlay(RoundedRectangle(cornerRadius: DS.r8).stroke(DS.accent.opacity(0.3), lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: DS.r8)
+                            .stroke(DS.accent.opacity(0.3), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
@@ -118,7 +158,7 @@ struct BackupView: View {
                 .clipShape(RoundedRectangle(cornerRadius: DS.r12))
                 .overlay(RoundedRectangle(cornerRadius: DS.r12).stroke(DS.border, lineWidth: 1))
 
-                // Instructions
+                // Tips
                 VStack(alignment: .leading, spacing: DS.sp8) {
                     FieldLabel(text: "How to keep your data safe")
                     VStack(alignment: .leading, spacing: DS.sp10) {
@@ -140,7 +180,7 @@ struct BackupView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
 
-        // Toast overlay
+        // Toast
         .overlay(alignment: .bottom) {
             if let t = toast {
                 ToastView(message: t)
@@ -150,13 +190,14 @@ struct BackupView: View {
         }
         .animation(.spring(response: 0.4), value: toast?.id)
 
-        // Export sheet
+        // Export — uses plain .json, no custom UTType needed
         .fileExporter(
             isPresented: $showExporter,
-            document: exportDoc,
-            contentType: .taskflowBackup,
+            document: exportSnapshot.map { BackupDocument(snapshot: $0) },
+            contentType: .json,
             defaultFilename: defaultFilename()
         ) { result in
+            exportSnapshot = nil
             switch result {
             case .success:
                 showToast(icon: "checkmark.circle.fill", message: "Backup saved successfully", color: DS.green)
@@ -168,7 +209,7 @@ struct BackupView: View {
         // Import picker
         .fileImporter(
             isPresented: $showImporter,
-            allowedContentTypes: [.taskflowBackup, .json],
+            allowedContentTypes: [.json],
             allowsMultipleSelection: false
         ) { result in
             switch result {
@@ -180,19 +221,19 @@ struct BackupView: View {
             }
         }
 
-        // Confirm before replacing data
+        // Confirm before replacing
         .confirmationDialog(
             "Replace all data with this backup?",
             isPresented: $showImportConfirm,
             titleVisibility: .visible
         ) {
             Button("Replace Data", role: .destructive) {
-                if let doc = pendingImport { applyImport(doc) }
+                if let snap = pendingImport { applyImport(snap) }
             }
             Button("Cancel", role: .cancel) { pendingImport = nil }
         } message: {
-            if let doc = pendingImport {
-                Text("This will replace your \(store.tags.count) tags and \(store.tasks.count) tasks with \(doc.snapshot.tags.count) tags and \(doc.snapshot.tasks.count) tasks from the backup.")
+            if let snap = pendingImport {
+                Text("This will replace your \(store.tags.count) tags and \(store.tasks.count) tasks with \(snap.tags.count) tags and \(snap.tasks.count) tasks from the backup.")
             }
         }
     }
@@ -200,8 +241,7 @@ struct BackupView: View {
     // MARK: - Helpers
 
     private func defaultFilename() -> String {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
         return "TaskFlow-backup-\(f.string(from: Date()))"
     }
 
@@ -209,19 +249,21 @@ struct BackupView: View {
         let accessing = url.startAccessingSecurityScopedResource()
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
         do {
-            let data = try Data(contentsOf: url)
-            let snapshot = try JSONDecoder().decode(BackupSnapshot.self, from: data)
-            pendingImport = BackupDocument(snapshot: snapshot)
+            let data    = try Data(contentsOf: url)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let snapshot = try decoder.decode(BackupSnapshot.self, from: data)
+            pendingImport    = snapshot
             showImportConfirm = true
         } catch {
             showToast(icon: "xmark.circle.fill", message: "Invalid backup file", color: DS.red)
         }
     }
 
-    private func applyImport(_ doc: BackupDocument) {
-        store.tags  = doc.snapshot.tags
-        store.tasks = doc.snapshot.tasks
-        store.goals = doc.snapshot.goals
+    private func applyImport(_ snap: BackupSnapshot) {
+        store.tags  = snap.tags
+        store.tasks = snap.tasks
+        store.goals = snap.goals
         store.persist()
         pendingImport = nil
         showToast(icon: "checkmark.circle.fill", message: "Data restored successfully", color: DS.green)
@@ -229,56 +271,7 @@ struct BackupView: View {
 
     private func showToast(icon: String, message: String, color: Color) {
         toast = ToastMessage(icon: icon, message: message, color: color)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            toast = nil
-        }
-    }
-}
-
-// MARK: - Backup Document (FileDocument)
-
-struct BackupSnapshot: Codable {
-    var tags:  [TFTag]
-    var tasks: [TFTask]
-    var goals: [TFGoal]
-    var exportedAt: Date = Date()
-    var appVersion: String = "1.0"
-}
-
-extension UTType {
-    static let taskflowBackup = UTType(exportedAs: "personal.TaskFlow.backup")
-}
-
-struct BackupDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.taskflowBackup, .json] }
-
-    var snapshot: BackupSnapshot
-
-    // Init from store
-    init(store: AppStore) {
-        snapshot = BackupSnapshot(tags: store.tags, tasks: store.tasks, goals: store.goals)
-    }
-
-    // Init for pending import
-    init(snapshot: BackupSnapshot) {
-        self.snapshot = snapshot
-    }
-
-    // FileDocument read
-    init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-        snapshot = try JSONDecoder().decode(BackupSnapshot.self, from: data)
-    }
-
-    // FileDocument write
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(snapshot)
-        return FileWrapper(regularFileWithContents: data)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { toast = nil }
     }
 }
 
@@ -319,10 +312,10 @@ struct TipRow: View {
 }
 
 struct ToastMessage: Identifiable, Equatable {
-    let id = UUID()
-    let icon: String
+    let id      = UUID()
+    let icon:    String
     let message: String
-    let color: Color
+    let color:   Color
 }
 
 struct ToastView: View {

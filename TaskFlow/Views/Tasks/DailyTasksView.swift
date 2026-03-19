@@ -4,8 +4,9 @@ import SwiftUI
 
 struct DailyTasksView: View {
     @EnvironmentObject var store: AppStore
-    @State private var showAdd = false
+    @State private var showAdd        = false
     @State private var editTask: TFTask? = nil
+    @State private var showDatePicker = false
 
     var tasks:   [TFTask] { store.tasksFor(date: store.selectedDate) }
     var pending: [TFTask] { tasks.filter { !$0.isDone } }
@@ -25,7 +26,7 @@ struct DailyTasksView: View {
 
                     if tasks.isEmpty {
                         EmptyState(
-                            icon: "📋",
+                            icon: "checklist",
                             title: isToday ? "No tasks today" : "Nothing for \(store.selectedDate.shortFormatted())",
                             subtitle: "Tap + to add your first task.",
                             action: { showAdd = true },
@@ -82,8 +83,90 @@ struct DailyTasksView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .sheet(isPresented: $showAdd) { TaskFormView(mode: .add) }
-        .sheet(item: $editTask)       { TaskFormView(mode: .edit($0)) }
+        .toolbar {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                if !isToday {
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            store.selectedDate = .today()
+                        }
+                    } label: {
+                        Text("Today")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(DS.accent)
+                    }
+                }
+                Button { showDatePicker = true } label: {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(DS.accent)
+                }
+            }
+        }
+        .sheet(isPresented: $showAdd)        { TaskFormView(mode: .add) }
+        .sheet(item: $editTask)              { TaskFormView(mode: .edit($0)) }
+        .sheet(isPresented: $showDatePicker) { DatePickerSheet() }
+    }
+}
+
+// MARK: - Date Picker Sheet
+
+struct DatePickerSheet: View {
+    @EnvironmentObject var store: AppStore
+    @Environment(\.dismiss) var dismiss
+    @State private var picked: Date = Date()
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                DatePicker("", selection: $picked, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .tint(DS.accent)
+                    .padding(DS.sp16)
+
+                Divider()
+
+                let dateStr = dateString(picked)
+                let count   = store.taskCount(for: dateStr)
+                if count > 0 {
+                    HStack(spacing: DS.sp8) {
+                        Image(systemName: "checkmark.circle")
+                            .font(.system(size: 13))
+                            .foregroundColor(DS.accent)
+                        Text("\(count) task\(count == 1 ? "" : "s") on this day")
+                            .font(.system(size: 13))
+                            .foregroundColor(DS.text2)
+                        Spacer()
+                    }
+                    .padding(.horizontal, DS.sp20)
+                    .padding(.vertical, DS.sp12)
+                }
+                Spacer()
+            }
+            .background(DS.bg)
+            .navigationTitle("Go to Date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.foregroundColor(DS.text3)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Go") {
+                        withAnimation(.spring(response: 0.3)) {
+                            store.selectedDate = dateString(picked)
+                        }
+                        dismiss()
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(DS.accent)
+                }
+            }
+        }
+        .onAppear { picked = store.selectedDate.toDate() ?? Date() }
+    }
+
+    private func dateString(_ d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: d)
     }
 }
 
@@ -115,8 +198,8 @@ struct WeekStrip: View {
             .onAppear {
                 proxy.scrollTo(store.selectedDate, anchor: .center)
             }
-            .onChange(of: store.selectedDate) { newDate in
-                withAnimation { proxy.scrollTo(newDate, anchor: .center) }
+            .onChange(of: store.selectedDate) {
+                withAnimation { proxy.scrollTo(store.selectedDate, anchor: .center) }
             }
         }
     }
@@ -161,7 +244,6 @@ struct DayCell: View {
                         .foregroundColor(isSelected ? .white : (isToday ? DS.accent : DS.text))
                 }
 
-                // Dot indicators
                 if taskCount > 0 {
                     HStack(spacing: 2) {
                         ForEach(0..<min(taskCount, 3), id: \.self) { i in
@@ -201,14 +283,12 @@ struct ImprovedTaskRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
 
-            // Priority left bar
             RoundedRectangle(cornerRadius: 2)
                 .fill(task.isDone ? DS.border : priorityColor)
                 .frame(width: 3)
                 .padding(.vertical, DS.sp12)
                 .padding(.leading, DS.sp10)
 
-            // Checkbox
             Button { store.toggleDone(task) } label: {
                 ZStack {
                     RoundedRectangle(cornerRadius: 5)
@@ -227,7 +307,6 @@ struct ImprovedTaskRow: View {
             .buttonStyle(.plain)
             .padding(.leading, DS.sp10)
 
-            // Text content
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
                     .font(.system(size: 15, weight: .medium))
@@ -243,15 +322,12 @@ struct ImprovedTaskRow: View {
                         .lineLimit(1)
                 }
 
-                // Time + tags
                 if task.displayTime != nil || !task.tagSelections.isEmpty {
                     HStack(spacing: 6) {
                         if let t = task.displayTime {
                             HStack(spacing: 3) {
-                                Image(systemName: "clock")
-                                    .font(.system(size: 10))
-                                Text(t)
-                                    .font(.system(size: 11, weight: .medium))
+                                Image(systemName: "clock").font(.system(size: 10))
+                                Text(t).font(.system(size: 11, weight: .medium))
                             }
                             .foregroundColor(DS.text3)
                         }

@@ -371,8 +371,8 @@ struct GoalField: View {
                 .frame(width: 90)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(DS.accent)
-                .onChange(of: value) { v in
-                    if let n = Int(v), n > max { value = "\(max)" }
+                .onChange(of: value) {
+                    if let n = Int(value), n > max { value = "\(max)" }
                 }
             Text("/ \(max)")
                 .font(.system(size: 12))
