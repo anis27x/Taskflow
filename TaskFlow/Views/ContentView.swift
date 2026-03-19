@@ -1,14 +1,16 @@
 import SwiftUI
 
 enum AppTab: String, CaseIterable, Identifiable {
-    case tasks = "Tasks"; case stats = "Stats"; case tags = "Tags"; case goals = "Goals"
+    case tasks = "Tasks"; case stats = "Stats"; case tags = "Tags"
+    case goals = "Goals"; case settings = "Settings"
     var id: String { rawValue }
     var icon: String {
         switch self {
-        case .tasks: return "checklist"
-        case .stats: return "chart.bar"
-        case .tags:  return "tag"
-        case .goals: return "target"
+        case .tasks:    return "checklist"
+        case .stats:    return "chart.bar"
+        case .tags:     return "tag"
+        case .goals:    return "target"
+        case .settings: return "gearshape"
         }
     }
 }
@@ -35,15 +37,91 @@ struct IOSLayout: View {
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack { DailyTasksView() }
-                .tabItem { Label("Tasks", systemImage: "checklist") }.tag(AppTab.tasks)
+                .tabItem { Label("Tasks", systemImage: "checklist") }
+                .tag(AppTab.tasks)
             NavigationStack { StatsView() }
-                .tabItem { Label("Stats", systemImage: "chart.bar") }.tag(AppTab.stats)
+                .tabItem { Label("Stats", systemImage: "chart.bar") }
+                .tag(AppTab.stats)
             NavigationStack { TagsView() }
-                .tabItem { Label("Tags", systemImage: "tag") }.tag(AppTab.tags)
+                .tabItem { Label("Tags", systemImage: "tag") }
+                .tag(AppTab.tags)
             NavigationStack { GoalsView() }
-                .tabItem { Label("Goals", systemImage: "target") }.tag(AppTab.goals)
+                .tabItem { Label("Goals", systemImage: "target") }
+                .tag(AppTab.goals)
+            NavigationStack { IOSSettingsView() }
+                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tag(AppTab.settings)
         }
         .tint(DS.accent)
+    }
+}
+
+// MARK: - iOS Settings View
+
+struct IOSSettingsView: View {
+    var body: some View {
+        List {
+            Section("Data") {
+                NavigationLink {
+                    BackupView()
+                } label: {
+                    HStack(spacing: DS.sp12) {
+                        Image(systemName: "arrow.up.arrow.down.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(DS.accent)
+                            .frame(width: 32)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Backup & Restore")
+                                .font(.system(size: 15))
+                                .foregroundColor(DS.text)
+                            Text("Export or import your tasks and tags")
+                                .font(.system(size: 12))
+                                .foregroundColor(DS.text3)
+                        }
+                    }
+                    .padding(.vertical, DS.sp4)
+                }
+            }
+
+            Section("Storage") {
+                HStack {
+                    Image(systemName: "internaldrive.fill")
+                        .font(.system(size: 15))
+                        .foregroundColor(DS.text3)
+                        .frame(width: 32)
+                    Text("Saved locally on device")
+                        .font(.system(size: 14))
+                        .foregroundColor(DS.text2)
+                    Spacer()
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(DS.green)
+                        .font(.system(size: 15))
+                }
+                .padding(.vertical, DS.sp4)
+            }
+
+            Section {
+                HStack {
+                    Spacer()
+                    VStack(spacing: 4) {
+                        Text("TaskFlow")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(DS.text3)
+                        Text("Version 1.0")
+                            .font(.system(size: 12))
+                            .foregroundColor(DS.text3)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, DS.sp4)
+                .listRowBackground(Color.clear)
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(DS.bg)
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -56,10 +134,11 @@ struct MacLayout: View {
             MacSidebar(tab: $tab)
         } detail: {
             switch tab {
-            case .tasks: DailyTasksView()
-            case .stats: StatsView()
-            case .tags:  TagsView()
-            case .goals: GoalsView()
+            case .tasks:    DailyTasksView()
+            case .stats:    StatsView()
+            case .tags:     TagsView()
+            case .goals:    GoalsView()
+            case .settings: BackupView()
             }
         }
     }
@@ -76,7 +155,6 @@ struct MacSidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // Logo row
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 7)
                     .fill(DS.accent)
@@ -87,24 +165,13 @@ struct MacSidebar: View {
                     Text("Task tracker").font(.system(size: 11)).foregroundColor(DS.text3)
                 }
                 Spacer()
-                if store.isSyncing {
-                    ProgressView().scaleEffect(0.65)
-                } else if store.cloudAvailable {
-                    Image(systemName: "icloud.fill")
-                        .font(.system(size: 11)).foregroundColor(DS.text3)
-                } else {
-                    Image(systemName: "icloud.slash")
-                        .font(.system(size: 11)).foregroundColor(DS.text3)
-                }
             }
             .padding(DS.sp16)
             Divider()
 
-            // Date nav
             DateNav()
             Divider()
 
-            // Nav links
             VStack(alignment: .leading, spacing: 2) {
                 Text("VIEWS")
                     .font(.system(size: 10, weight: .medium)).tracking(0.8).foregroundColor(DS.text3)
@@ -118,7 +185,6 @@ struct MacSidebar: View {
             Spacer()
             Divider()
 
-            // Footer stats
             HStack(spacing: DS.sp20) {
                 SidebarStat(value: "\(dayTasks.count)", label: "Tasks", color: DS.text)
                 SidebarStat(value: "\(done)",           label: "Done",  color: DS.accent)
@@ -160,7 +226,7 @@ struct SidebarStat: View {
     }
 }
 
-// MARK: - Date Nav (shared between macOS sidebar & iOS inline)
+// MARK: - Date Nav
 
 struct DateNav: View {
     @EnvironmentObject var store: AppStore
@@ -208,25 +274,11 @@ struct DateNav: View {
     }
 }
 
-// MARK: - macOS Settings stub
+// MARK: - macOS Settings
 
 struct SettingsView: View {
-    @EnvironmentObject var store: AppStore
     var body: some View {
-        Form {
-            Section("iCloud Sync") {
-                HStack {
-                    Label("Status", systemImage: store.cloudAvailable ? "icloud.fill" : "icloud.slash")
-                    Spacer()
-                    Text(store.cloudAvailable ? "Connected" : "Not available")
-                        .foregroundColor(store.cloudAvailable ? DS.green : DS.text3)
-                }
-                Button("Sync Now") { Task { await store.pullFromCloud() } }
-                    .disabled(!store.cloudAvailable || store.isSyncing)
-            }
-        }
-        .formStyle(.grouped)
-        .frame(width: 400, height: 200)
-        .navigationTitle("Settings")
+        BackupView()
+            .frame(width: 480, height: 600)
     }
 }

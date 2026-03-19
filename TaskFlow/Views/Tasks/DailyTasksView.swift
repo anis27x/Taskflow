@@ -1,5 +1,7 @@
 import SwiftUI
 
+// MARK: - Daily Tasks View
+
 struct DailyTasksView: View {
     @EnvironmentObject var store: AppStore
     @State private var showAdd = false
@@ -11,188 +13,276 @@ struct DailyTasksView: View {
     var isToday: Bool     { store.selectedDate == .today() }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: DS.sp16) {
+        ZStack(alignment: .bottomTrailing) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
 
-                // iOS-only date nav
-                #if os(iOS)
-                IOSDateNav()
-                    .padding(.horizontal, DS.sp16)
-                    .padding(.top, DS.sp8)
-                #endif
+                    #if os(iOS)
+                    WeekStrip()
+                        .padding(.top, DS.sp8)
+                        .padding(.bottom, DS.sp16)
+                    #endif
 
-                if tasks.isEmpty {
-                    EmptyState(
-                        icon: "📋",
-                        title: isToday ? "No tasks today" : "Nothing for \(store.selectedDate.shortFormatted())",
-                        subtitle: "Tap + to add a task.",
-                        action: { showAdd = true },
-                        actionLabel: "Add Task"
-                    )
-                    .frame(minHeight: 340)
-                } else {
-                    if !pending.isEmpty {
-                        VStack(alignment: .leading, spacing: DS.sp8) {
-                            SectionHeader(title: "Pending", count: pending.count)
-                                .padding(.horizontal, DS.sp16)
-                            ForEach(pending) { t in
-                                TaskRow(task: t) { editTask = t }
+                    if tasks.isEmpty {
+                        EmptyState(
+                            icon: "📋",
+                            title: isToday ? "No tasks today" : "Nothing for \(store.selectedDate.shortFormatted())",
+                            subtitle: "Tap + to add your first task.",
+                            action: { showAdd = true },
+                            actionLabel: "Add Task"
+                        )
+                        .frame(minHeight: 300)
+                    } else {
+                        if !pending.isEmpty {
+                            VStack(alignment: .leading, spacing: DS.sp8) {
+                                SectionHeader(title: "Pending", count: pending.count)
                                     .padding(.horizontal, DS.sp16)
+                                    .padding(.bottom, 2)
+                                ForEach(pending) { t in
+                                    ImprovedTaskRow(task: t) { editTask = t }
+                                        .padding(.horizontal, DS.sp16)
+                                        .padding(.bottom, DS.sp8)
+                                }
                             }
+                            .padding(.top, DS.sp4)
                         }
-                    }
-                    if !done.isEmpty {
-                        VStack(alignment: .leading, spacing: DS.sp8) {
-                            SectionHeader(title: "Completed", count: done.count)
-                                .padding(.horizontal, DS.sp16)
-                            ForEach(done) { t in
-                                TaskRow(task: t) { editTask = t }
+                        if !done.isEmpty {
+                            VStack(alignment: .leading, spacing: DS.sp8) {
+                                SectionHeader(title: "Completed", count: done.count)
                                     .padding(.horizontal, DS.sp16)
+                                    .padding(.bottom, 2)
+                                ForEach(done) { t in
+                                    ImprovedTaskRow(task: t) { editTask = t }
+                                        .padding(.horizontal, DS.sp16)
+                                        .padding(.bottom, DS.sp8)
+                                }
                             }
+                            .padding(.top, DS.sp8)
                         }
                     }
                 }
+                .padding(.bottom, 100)
             }
-            .padding(.bottom, 80)
+            .background(DS.bg)
+
+            // Floating add button
+            Button { showAdd = true } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 56, height: 56)
+                    .background(DS.accent)
+                    .clipShape(Circle())
+                    .shadow(color: DS.accent.opacity(0.35), radius: 12, x: 0, y: 4)
+            }
+            .padding(.trailing, DS.sp20)
+            .padding(.bottom, DS.sp24)
         }
-        .background(DS.bg)
         .navigationTitle(isToday ? "Today" : store.selectedDate.shortFormatted())
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { showAdd = true } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(DS.accent)
-                }
-            }
-            ToolbarItem(placement: .secondaryAction) {
-                Button { Task { await store.pullFromCloud() } } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 13))
-                        .foregroundColor(DS.text3)
-                }
-            }
-        }
         .sheet(isPresented: $showAdd) { TaskFormView(mode: .add) }
-        .sheet(item: $editTask) { TaskFormView(mode: .edit($0)) }
-        .refreshable { await store.pullFromCloud() }
+        .sheet(item: $editTask)       { TaskFormView(mode: .edit($0)) }
     }
 }
 
-// MARK: - iOS inline date nav
+// MARK: - Week Strip
 
-struct IOSDateNav: View {
+struct WeekStrip: View {
     @EnvironmentObject var store: AppStore
-    var body: some View {
-        HStack(spacing: DS.sp12) {
-            navBtn("chevron.left")  { store.selectedDate = store.selectedDate.addingDays(-1) }
-            Spacer()
-            VStack(spacing: 2) {
-                Text(store.selectedDate.longFormatted())
-                    .font(.system(size: 13, weight: .semibold)).foregroundColor(DS.text)
-                    .lineLimit(1).minimumScaleFactor(0.8)
-            }
-            Spacer()
-            navBtn("chevron.right") { store.selectedDate = store.selectedDate.addingDays(1) }
-        }
+
+    private var days: [String] {
+        let today = String.today()
+        return (-21...7).map { today.addingDays($0) }
     }
 
-    @ViewBuilder
-    func navBtn(_ icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 32, height: 32)
-                .background(DS.card)
-                .clipShape(RoundedRectangle(cornerRadius: DS.r6))
-                .overlay(RoundedRectangle(cornerRadius: DS.r6).stroke(DS.border, lineWidth: 1))
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(days, id: \.self) { day in
+                        DayCell(day: day, isSelected: store.selectedDate == day) {
+                            withAnimation(.spring(response: 0.3)) {
+                                store.selectedDate = day
+                            }
+                        }
+                        .id(day)
+                    }
+                }
+                .padding(.horizontal, DS.sp16)
+            }
+            .onAppear {
+                proxy.scrollTo(store.selectedDate, anchor: .center)
+            }
+            .onChange(of: store.selectedDate) { newDate in
+                withAnimation { proxy.scrollTo(newDate, anchor: .center) }
+            }
         }
-        .buttonStyle(.plain).foregroundColor(DS.text2)
     }
 }
 
-// MARK: - Task Row
+struct DayCell: View {
+    @EnvironmentObject var store: AppStore
+    let day: String
+    let isSelected: Bool
+    let onTap: () -> Void
 
-struct TaskRow: View {
+    private var isToday: Bool { day == .today() }
+    private var taskCount: Int { store.taskCount(for: day) }
+    private var doneCount: Int { store.tasks.filter { $0.date == day && $0.isDone }.count }
+
+    private var dayNum: String {
+        let f = DateFormatter(); f.dateFormat = "d"
+        return day.toDate().map { f.string(from: $0) } ?? ""
+    }
+    private var dayName: String {
+        let f = DateFormatter(); f.dateFormat = "EEE"
+        return day.toDate().map { f.string(from: $0) } ?? ""
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 4) {
+                Text(dayName.uppercased())
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(isSelected ? DS.accent : DS.text3)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: DS.r8)
+                        .fill(isSelected ? DS.accent : (isToday ? DS.accentBg : DS.card))
+                        .frame(width: 40, height: 44)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DS.r8)
+                                .stroke(isToday && !isSelected ? DS.accent.opacity(0.4) : Color.clear, lineWidth: 1.5)
+                        )
+                    Text(dayNum)
+                        .font(.system(size: 16, weight: isSelected || isToday ? .semibold : .regular))
+                        .foregroundColor(isSelected ? .white : (isToday ? DS.accent : DS.text))
+                }
+
+                // Dot indicators
+                if taskCount > 0 {
+                    HStack(spacing: 2) {
+                        ForEach(0..<min(taskCount, 3), id: \.self) { i in
+                            Circle()
+                                .fill(i < doneCount
+                                    ? (isSelected ? Color.white.opacity(0.6) : DS.green.opacity(0.7))
+                                    : (isSelected ? Color.white.opacity(0.9) : DS.accent.opacity(0.7)))
+                                .frame(width: 4, height: 4)
+                        }
+                    }
+                } else {
+                    Color.clear.frame(height: 4)
+                }
+            }
+            .frame(width: 44)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Improved Task Row
+
+struct ImprovedTaskRow: View {
     @EnvironmentObject var store: AppStore
     let task: TFTask
     let onEdit: () -> Void
 
+    private var priorityColor: Color {
+        switch task.priority {
+        case .critical: return Color(hex: "#DC2626")
+        case .high:     return Color(hex: "#EA580C")
+        case .medium:   return DS.accent
+        case .low:      return Color(hex: "#059669")
+        }
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: DS.sp12) {
+        HStack(alignment: .center, spacing: 0) {
+
+            // Priority left bar
+            RoundedRectangle(cornerRadius: 2)
+                .fill(task.isDone ? DS.border : priorityColor)
+                .frame(width: 3)
+                .padding(.vertical, DS.sp12)
+                .padding(.leading, DS.sp10)
 
             // Checkbox
             Button { store.toggleDone(task) } label: {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(task.isDone ? DS.accent : DS.card)
-                    .frame(width: 18, height: 18)
-                    .overlay {
-                        if task.isDone {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 9, weight: .bold)).foregroundColor(.white)
-                        } else {
-                            RoundedRectangle(cornerRadius: 4).stroke(DS.border2, lineWidth: 1.5)
-                        }
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(task.isDone ? DS.accentBg : Color.clear)
+                        .frame(width: 24, height: 24)
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(task.isDone ? DS.accent : DS.border2, lineWidth: 1.5)
+                        .frame(width: 24, height: 24)
+                    if task.isDone {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(DS.accent)
                     }
+                }
             }
             .buttonStyle(.plain)
-            .padding(.top, 1)
+            .padding(.leading, DS.sp10)
 
-            VStack(alignment: .leading, spacing: 5) {
-                // Title + badge
-                HStack(spacing: 6) {
-                    Text(task.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(task.isDone ? DS.text3 : DS.text)
-                        .strikethrough(task.isDone, color: DS.text3)
-                        .lineLimit(2)
-                    PriorityBadge(priority: task.priority)
-                    Spacer()
-                }
+            // Text content
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(task.isDone ? DS.text3 : DS.text)
+                    .strikethrough(task.isDone, color: DS.text3)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                // Notes
-                if !task.notes.isEmpty {
+                if !task.notes.isEmpty && !task.isDone {
                     Text(task.notes)
-                        .font(.system(size: 12)).foregroundColor(DS.text3).lineLimit(2)
-                }
-
-                // Meta row
-                HStack(spacing: 6) {
-                    if let t = task.displayTime {
-                        HStack(spacing: 3) {
-                            Image(systemName: "clock").font(.system(size: 10))
-                            Text(t).font(.system(size: 11, weight: .medium))
-                        }
+                        .font(.system(size: 12))
                         .foregroundColor(DS.text3)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(DS.bg2)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
-                    }
-                    ForEach(task.tagSelections, id: \.tagId) { sel in
-                        if let tag = store.tags.first(where: { $0.id == sel.tagId }) {
-                            let subs = sel.subtagIds.compactMap { id in
-                                tag.subtags.first { $0.id == id }?.name
+                        .lineLimit(1)
+                }
+
+                // Time + tags
+                if task.displayTime != nil || !task.tagSelections.isEmpty {
+                    HStack(spacing: 6) {
+                        if let t = task.displayTime {
+                            HStack(spacing: 3) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 10))
+                                Text(t)
+                                    .font(.system(size: 11, weight: .medium))
                             }
-                            TagChip(tag: tag, subNames: subs)
+                            .foregroundColor(DS.text3)
+                        }
+                        ForEach(task.tagSelections, id: \.tagId) { sel in
+                            if let tag = store.tags.first(where: { $0.id == sel.tagId }) {
+                                let subs = sel.subtagIds.compactMap { id in
+                                    tag.subtags.first { $0.id == id }?.name
+                                }
+                                TagChip(tag: tag, subNames: subs)
+                            }
                         }
                     }
                 }
             }
+            .padding(.leading, DS.sp10)
+            .padding(.vertical, DS.sp12)
 
-            // Edit button
+            Spacer(minLength: 4)
+
             Button(action: onEdit) {
-                Image(systemName: "pencil").font(.system(size: 11))
-                    .frame(width: 26, height: 26)
-                    .background(DS.bg).clipShape(RoundedRectangle(cornerRadius: 5))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.border2)
+                    .padding(.trailing, DS.sp12)
             }
-            .buttonStyle(.plain).foregroundColor(DS.text3)
+            .buttonStyle(.plain)
         }
-        .padding(DS.sp12)
-        .cardStyle()
-        .opacity(task.isDone ? 0.5 : 1)
+        .background(DS.card)
+        .clipShape(RoundedRectangle(cornerRadius: DS.r10))
+        .overlay(RoundedRectangle(cornerRadius: DS.r10).stroke(DS.border, lineWidth: 1))
+        .opacity(task.isDone ? 0.6 : 1)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) { store.deleteTask(task) } label: {
                 Label("Delete", systemImage: "trash")
@@ -217,4 +307,18 @@ struct TaskRow: View {
             }
         }
     }
+}
+
+// MARK: - Legacy shims
+
+struct TaskRow: View {
+    @EnvironmentObject var store: AppStore
+    let task: TFTask
+    let onEdit: () -> Void
+    var body: some View { ImprovedTaskRow(task: task, onEdit: onEdit) }
+}
+
+struct IOSDateNav: View {
+    @EnvironmentObject var store: AppStore
+    var body: some View { WeekStrip() }
 }

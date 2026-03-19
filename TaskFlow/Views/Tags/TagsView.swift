@@ -10,7 +10,8 @@ struct TagsView: View {
     var body: some View {
         Group {
             if store.tags.isEmpty {
-                EmptyState(icon: "🏷️", title: "No tags", subtitle: "Create tags to organise tasks.",
+                EmptyState(icon: "tag", title: "No tags",
+                           subtitle: "Create tags to organise your tasks.",
                            action: { showForm = true }, actionLabel: "New Tag")
             } else {
                 List {
@@ -45,7 +46,7 @@ struct TagsView: View {
             }
             Button("Cancel", role: .cancel) { newSubtagName = ""; addSubtagTo = nil }
         } message: {
-            Text("Enter a name for the subtag under "\(addSubtagTo?.name ?? "")"")
+            Text("Enter a name for the subtag under \"\(addSubtagTo?.name ?? "")\"")
         }
     }
 }

@@ -1,8 +1,11 @@
 import SwiftUI
 
+// MARK: - Goals View
+
 struct GoalsView: View {
     @EnvironmentObject var store: AppStore
     @State private var editGoalFor: TFTag? = nil
+    @State private var showNewGoal = false
 
     var tagsWithGoals: [(tag: TFTag, goal: TFGoal)] {
         store.tags.compactMap { tag in
@@ -18,54 +21,183 @@ struct GoalsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: DS.sp16) {
-                if tagsWithGoals.isEmpty && store.tags.isEmpty {
-                    EmptyState(icon: "🎯", title: "No goals yet",
-                               subtitle: "Create tags first, then set weekly, monthly or yearly goals.")
-                        .frame(minHeight: 300)
-                } else if tagsWithGoals.isEmpty {
-                    EmptyState(icon: "🎯", title: "No goals set",
-                               subtitle: "Tap a tag below to set a goal.",
-                               action: nil)
-                        .frame(minHeight: 200)
-                } else {
-                    ForEach(tagsWithGoals, id: \.tag.id) { pair in
-                        GoalCard(tag: pair.tag, goal: pair.goal) {
-                            editGoalFor = pair.tag
-                        }
-                        .padding(.horizontal, DS.sp16)
-                    }
-                }
 
-                // Tags without goals
-                if !tagsWithoutGoals.isEmpty {
-                    VStack(alignment: .leading, spacing: DS.sp8) {
-                        SectionHeader(title: "Set a goal", count: tagsWithoutGoals.count)
-                            .padding(.horizontal, DS.sp16)
-                        ForEach(tagsWithoutGoals) { tag in
-                            Button { editGoalFor = tag } label: {
-                                HStack(spacing: DS.sp12) {
-                                    Circle().fill(Color(hex: tag.colorHex)).frame(width: 10, height: 10)
-                                    Text(tag.name).font(.system(size: 14)).foregroundColor(DS.text)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 12)).foregroundColor(DS.text3)
+                // No tags at all
+                if store.tags.isEmpty {
+                    EmptyState(
+                        icon: "target",
+                        title: "No goals yet",
+                        subtitle: "Create tags first in the Tags tab, then come back to set goals."
+                    )
+                    .frame(minHeight: 340)
+
+                } else {
+
+                    // Active goal cards
+                    if !tagsWithGoals.isEmpty {
+                        VStack(alignment: .leading, spacing: DS.sp8) {
+                            SectionHeader(title: "Active goals", count: tagsWithGoals.count)
+                                .padding(.horizontal, DS.sp16)
+                            ForEach(tagsWithGoals, id: \.tag.id) { pair in
+                                GoalCard(tag: pair.tag, goal: pair.goal) {
+                                    editGoalFor = pair.tag
                                 }
-                                .padding(DS.sp12).cardStyle()
+                                .padding(.horizontal, DS.sp16)
                             }
-                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    // Tags without goals
+                    if !tagsWithoutGoals.isEmpty {
+                        VStack(alignment: .leading, spacing: DS.sp8) {
+                            SectionHeader(
+                                title: tagsWithGoals.isEmpty ? "Choose a tag to start" : "No goal yet",
+                                count: tagsWithoutGoals.count
+                            )
                             .padding(.horizontal, DS.sp16)
+
+                            ForEach(tagsWithoutGoals) { tag in
+                                Button { editGoalFor = tag } label: {
+                                    HStack(spacing: DS.sp12) {
+                                        Circle()
+                                            .fill(Color(hex: tag.colorHex))
+                                            .frame(width: 10, height: 10)
+                                        Text(tag.name)
+                                            .font(.system(size: 14))
+                                            .foregroundColor(DS.text)
+                                        Spacer()
+                                        Text("Set goal")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(DS.accent)
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(DS.text3)
+                                    }
+                                    .padding(DS.sp12)
+                                    .cardStyle()
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal, DS.sp16)
+                            }
                         }
                     }
                 }
             }
             .padding(.vertical, DS.sp16)
-            .padding(.bottom, 60)
+            .padding(.bottom, 80)
         }
         .background(DS.bg)
         .navigationTitle("Goals")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    if tagsWithoutGoals.isEmpty && !store.tags.isEmpty {
+                        // All tags have goals — open picker to re-edit any
+                        showNewGoal = true
+                    } else if store.tags.count == 1 {
+                        // Only one tag available, go straight to form
+                        editGoalFor = tagsWithoutGoals.first ?? store.tags.first
+                    } else {
+                        showNewGoal = true
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .foregroundColor(store.tags.isEmpty ? DS.text3 : DS.accent)
+                }
+                .disabled(store.tags.isEmpty)
+            }
+        }
+        // Tag picker sheet → then goal form
+        .sheet(isPresented: $showNewGoal) {
+            TagPickerSheet(onSelect: { tag in
+                showNewGoal = false
+                // Small delay so the first sheet dismisses before the next presents
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    editGoalFor = tag
+                }
+            })
+        }
+        // Goal form sheet
         .sheet(item: $editGoalFor) { tag in
             GoalFormView(tag: tag)
         }
+    }
+}
+
+// MARK: - Tag Picker Sheet
+
+struct TagPickerSheet: View {
+    @EnvironmentObject var store: AppStore
+    @Environment(\.dismiss) var dismiss
+    let onSelect: (TFTag) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(store.tags) { tag in
+                    Button {
+                        onSelect(tag)
+                    } label: {
+                        HStack(spacing: DS.sp12) {
+                            Circle()
+                                .fill(Color(hex: tag.colorHex))
+                                .frame(width: 12, height: 12)
+                            Text(tag.name)
+                                .font(.system(size: 15))
+                                .foregroundColor(DS.text)
+                            Spacer()
+
+                            // Show current goal summary if one exists
+                            if let g = store.goalFor(tagId: tag.id), g.hasAny {
+                                GoalSummaryBadge(goal: g)
+                            } else {
+                                Text("No goal")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(DS.text3)
+                            }
+
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11))
+                                .foregroundColor(DS.text3)
+                        }
+                        .padding(.vertical, DS.sp4)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(DS.bg)
+            .navigationTitle("Select Tag")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundColor(DS.text3)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Small badge showing existing goal numbers
+
+struct GoalSummaryBadge: View {
+    let goal: TFGoal
+    var summary: String {
+        var parts: [String] = []
+        if let w = goal.weekly,  w > 0 { parts.append("\(w)w") }
+        if let m = goal.monthly, m > 0 { parts.append("\(m)m") }
+        if let y = goal.yearly,  y > 0 { parts.append("\(y)y") }
+        return parts.joined(separator: " · ")
+    }
+    var body: some View {
+        Text(summary)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundColor(DS.accent)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(DS.accentBg)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 }
 
@@ -79,23 +211,30 @@ struct GoalCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.sp12) {
-            // Header
             HStack(spacing: DS.sp8) {
-                RoundedRectangle(cornerRadius: 3)
+                RoundedRectangle(cornerRadius: 2)
                     .fill(Color(hex: tag.colorHex))
                     .frame(width: 3, height: 18)
-                Circle().fill(Color(hex: tag.colorHex)).frame(width: 10, height: 10)
+                Circle()
+                    .fill(Color(hex: tag.colorHex))
+                    .frame(width: 10, height: 10)
                 Text(tag.name)
-                    .font(.system(size: 15, weight: .semibold)).foregroundColor(DS.text)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(DS.text)
                 Spacer()
                 Button(action: onEdit) {
-                    Image(systemName: "pencil").font(.system(size: 12))
-                        .padding(6).background(DS.bg).clipShape(RoundedRectangle(cornerRadius: 5))
+                    HStack(spacing: 4) {
+                        Image(systemName: "pencil").font(.system(size: 11))
+                        Text("Edit").font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(DS.text3)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(DS.bg)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.r6))
                 }
-                .buttonStyle(.plain).foregroundColor(DS.text3)
+                .buttonStyle(.plain)
             }
 
-            // Period rows
             if let w = goal.weekly, w > 0 {
                 let days = store.countActiveDays(tagId: tag.id, in: store.weekDates())
                 ProgressRow(label: "This week", current: days, goal: min(w, 7), color: Color(hex: tag.colorHex))
@@ -130,40 +269,62 @@ struct GoalFormView: View {
     @State private var monthly: String = ""
     @State private var yearly:  String = ""
 
+    private var hasExisting: Bool { store.goalFor(tagId: tag.id)?.hasAny == true }
+
     var body: some View {
         NavigationStack {
             Form {
+                // Tag header
                 Section {
-                    HStack(spacing: DS.sp8) {
-                        Circle().fill(Color(hex: tag.colorHex)).frame(width: 12, height: 12)
-                        Text(tag.name).font(.system(size: 15, weight: .semibold))
+                    HStack(spacing: DS.sp10) {
+                        Circle()
+                            .fill(Color(hex: tag.colorHex))
+                            .frame(width: 12, height: 12)
+                        Text(tag.name)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(DS.text)
                     }
                 }
 
-                Section("Goals (days per period)") {
-                    GoalField(label: "Weekly",  max: 7,   value: $weekly)
-                    GoalField(label: "Monthly", max: 31,  value: $monthly)
-                    GoalField(label: "Yearly",  max: 365, value: $yearly)
+                // Goal fields
+                Section {
+                    GoalField(label: "Weekly",  placeholder: "days / week",  max: 7,   value: $weekly)
+                    GoalField(label: "Monthly", placeholder: "days / month", max: 31,  value: $monthly)
+                    GoalField(label: "Yearly",  placeholder: "days / year",  max: 365, value: $yearly)
+                } header: {
+                    Text("Target days per period")
+                } footer: {
+                    Text("Leave a field blank to skip that period. Progress is counted as unique days where this tag appears on a task.")
+                        .font(.system(size: 12))
                 }
 
-                Section {
-                    Text("Leave blank to skip a period. Progress tracks unique days with this tag logged.")
-                        .font(.system(size: 12)).foregroundColor(DS.text3)
+                // Delete option if goal already exists
+                if hasExisting {
+                    Section {
+                        Button(role: .destructive) { deleteGoal() } label: {
+                            HStack {
+                                Spacer()
+                                Text("Remove all goals for \(tag.name)")
+                                    .font(.system(size: 14))
+                                Spacer()
+                            }
+                        }
+                    }
                 }
             }
             .scrollContentBackground(.hidden)
             .background(DS.bg)
-            .navigationTitle("Set Goals")
-            #if os(iOS)
+            .navigationTitle(hasExisting ? "Edit Goal" : "New Goal")
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }.foregroundColor(DS.accent)
+                    Button("Cancel") { dismiss() }
+                        .foregroundColor(DS.text3)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .font(.system(size: 14, weight: .semibold)).foregroundColor(DS.accent)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(DS.accent)
                 }
             }
         }
@@ -183,29 +344,39 @@ struct GoalFormView: View {
         store.upsertGoal(tagId: tag.id, weekly: w, monthly: m, yearly: y)
         dismiss()
     }
+
+    private func deleteGoal() {
+        store.upsertGoal(tagId: tag.id, weekly: nil, monthly: nil, yearly: nil)
+        dismiss()
+    }
 }
+
+// MARK: - Goal Field
 
 struct GoalField: View {
     let label: String
+    let placeholder: String
     let max: Int
     @Binding var value: String
 
     var body: some View {
         HStack {
-            Text(label).font(.system(size: 14)).foregroundColor(DS.text)
+            Text(label)
+                .font(.system(size: 14))
+                .foregroundColor(DS.text)
             Spacer()
-            TextField("—", text: $value)
+            TextField(placeholder, text: $value)
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.trailing)
-                .frame(width: 60)
+                .frame(width: 90)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(DS.accent)
                 .onChange(of: value) { v in
-                    // clamp to max
                     if let n = Int(v), n > max { value = "\(max)" }
                 }
             Text("/ \(max)")
-                .font(.system(size: 12)).foregroundColor(DS.text3)
+                .font(.system(size: 12))
+                .foregroundColor(DS.text3)
         }
     }
 }

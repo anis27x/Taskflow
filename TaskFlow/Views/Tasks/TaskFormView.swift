@@ -15,68 +15,158 @@ struct TaskFormView: View {
     @State private var isDone   = false
     @State private var selTags: [TaskTagSel] = []
 
-    @State private var hasTime   = false
-    @State private var startH    = 9;  @State private var startM = 0; @State private var startPM = false
-    @State private var endH      = 10; @State private var endM   = 0; @State private var endPM   = false
+    @State private var hasTime  = false
+    @State private var startH   = 9;  @State private var startM = 0; @State private var startPM = false
+    @State private var endH     = 10; @State private var endM   = 0; @State private var endPM   = false
+
+    @FocusState private var titleFocused: Bool
 
     private var editing: TFTask? { if case .edit(let t) = mode { return t }; return nil }
+    private var canSave: Bool { !title.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
         NavigationStack {
-            Form {
-                // Basic info
-                Section("Task") {
-                    TextField("Title *", text: $title)
-                        .font(.system(size: 15, weight: .semibold))
-                    TextField("Notes", text: $notes, axis: .vertical)
-                        .lineLimit(2...4)
-                }
+            ScrollView {
+                VStack(spacing: DS.sp16) {
 
-                // Date + priority
-                Section("Schedule") {
-                    DatePicker("Date", selection: Binding(
-                        get: { date.toDate() ?? Date() },
-                        set: {
-                            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
-                            date = f.string(from: $0)
+                    // Title card
+                    VStack(alignment: .leading, spacing: DS.sp8) {
+                        FieldLabel(text: "Task title")
+                        TextField("What do you need to do?", text: $title, axis: .vertical)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(DS.text)
+                            .lineLimit(1...3)
+                            .focused($titleFocused)
+                            .padding(DS.sp12)
+                            .background(DS.bg2)
+                            .clipShape(RoundedRectangle(cornerRadius: DS.r8))
+
+                        TextField("Notes (optional)", text: $notes, axis: .vertical)
+                            .font(.system(size: 14))
+                            .foregroundColor(DS.text2)
+                            .lineLimit(1...4)
+                            .padding(DS.sp12)
+                            .background(DS.bg2)
+                            .clipShape(RoundedRectangle(cornerRadius: DS.r8))
+                    }
+                    .padding(DS.sp16)
+                    .background(DS.card)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.r12))
+                    .overlay(RoundedRectangle(cornerRadius: DS.r12).stroke(DS.border, lineWidth: 1))
+
+                    // Date + Priority row
+                    HStack(spacing: DS.sp12) {
+                        // Date
+                        VStack(alignment: .leading, spacing: DS.sp8) {
+                            FieldLabel(text: "Date")
+                            DatePicker("", selection: Binding(
+                                get: { date.toDate() ?? Date() },
+                                set: {
+                                    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+                                    date = f.string(from: $0)
+                                }
+                            ), displayedComponents: .date)
+                            .labelsHidden()
+                            .tint(DS.accent)
                         }
-                    ), displayedComponents: .date)
-                    .tint(DS.accent)
+                        .padding(DS.sp12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(DS.card)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.r12))
+                        .overlay(RoundedRectangle(cornerRadius: DS.r12).stroke(DS.border, lineWidth: 1))
 
-                    Picker("Priority", selection: $priority) {
-                        ForEach(Priority.allCases, id: \.self) { Text($0.label).tag($0) }
+                        // Priority
+                        VStack(alignment: .leading, spacing: DS.sp8) {
+                            FieldLabel(text: "Priority")
+                            Menu {
+                                ForEach(Priority.allCases, id: \.self) { p in
+                                    Button {
+                                        withAnimation { priority = p }
+                                    } label: {
+                                        Label(p.label, systemImage: priority == p ? "checkmark" : "")
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(priorityColor(priority))
+                                        .frame(width: 8, height: 8)
+                                    Text(priority.label)
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(DS.text)
+                                    Image(systemName: "chevron.up.chevron.down")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(DS.text3)
+                                }
+                            }
+                        }
+                        .padding(DS.sp12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(DS.card)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.r12))
+                        .overlay(RoundedRectangle(cornerRadius: DS.r12).stroke(DS.border, lineWidth: 1))
+                    }
+
+                    // Time range
+                    VStack(alignment: .leading, spacing: DS.sp12) {
+                        HStack {
+                            FieldLabel(text: "Time range")
+                            Spacer()
+                            Toggle("", isOn: $hasTime.animation(.spring(response: 0.3)))
+                                .tint(DS.accent)
+                                .labelsHidden()
+                        }
+                        if hasTime {
+                            Divider()
+                            HStack(spacing: DS.sp12) {
+                                CompactTimePicker(label: "Start", h: $startH, m: $startM, pm: $startPM)
+                                Text("→")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(DS.text3)
+                                CompactTimePicker(label: "End", h: $endH, m: $endM, pm: $endPM)
+                            }
+                        }
+                    }
+                    .padding(DS.sp16)
+                    .background(DS.card)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.r12))
+                    .overlay(RoundedRectangle(cornerRadius: DS.r12).stroke(DS.border, lineWidth: 1))
+
+                    // Tags
+                    if !store.tags.isEmpty {
+                        VStack(alignment: .leading, spacing: DS.sp12) {
+                            FieldLabel(text: "Tags")
+                            FlowTagPicker(tags: store.tags, selTags: $selTags)
+                        }
+                        .padding(DS.sp16)
+                        .background(DS.card)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.r12))
+                        .overlay(RoundedRectangle(cornerRadius: DS.r12).stroke(DS.border, lineWidth: 1))
+                    }
+
+                    // Done toggle (edit only)
+                    if editing != nil {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Mark as done")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundColor(DS.text)
+                                Text("Task will move to completed")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(DS.text3)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $isDone).tint(DS.accent).labelsHidden()
+                        }
+                        .padding(DS.sp16)
+                        .background(DS.card)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.r12))
+                        .overlay(RoundedRectangle(cornerRadius: DS.r12).stroke(DS.border, lineWidth: 1))
                     }
                 }
-
-                // Time range
-                Section {
-                    Toggle("Set time range", isOn: $hasTime.animation())
-                        .tint(DS.accent)
-                    if hasTime {
-                        WheelTimePicker(label: "Start", h: $startH, m: $startM, pm: $startPM)
-                        WheelTimePicker(label: "End",   h: $endH,   m: $endM,   pm: $endPM)
-                    }
-                } header: { Text("Time") }
-
-                // Tags
-                Section("Tags") {
-                    if store.tags.isEmpty {
-                        Text("No tags — create some in the Tags tab.")
-                            .foregroundColor(DS.text3).font(.system(size: 13))
-                    }
-                    ForEach(store.tags) { tag in
-                        TagToggleRow(tag: tag, selTags: $selTags)
-                    }
-                }
-
-                // Done toggle (edit only)
-                if editing != nil {
-                    Section {
-                        Toggle("Mark as done", isOn: $isDone).tint(DS.accent)
-                    }
-                }
+                .padding(DS.sp16)
+                .padding(.bottom, DS.sp24)
             }
-            .scrollContentBackground(.hidden)
             .background(DS.bg)
             .navigationTitle(editing == nil ? "New Task" : "Edit Task")
             #if os(iOS)
@@ -84,20 +174,37 @@ struct TaskFormView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }.foregroundColor(DS.accent)
+                    Button("Cancel") { dismiss() }
+                        .foregroundColor(DS.text3)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", action: save)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(title.trimmingCharacters(in: .whitespaces).isEmpty ? DS.text3 : DS.accent)
-                        .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(canSave ? DS.accent : DS.text3)
+                        .disabled(!canSave)
                 }
             }
         }
-        .onAppear(perform: populate)
+        .onAppear {
+            populate()
+            if editing == nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    titleFocused = true
+                }
+            }
+        }
     }
 
-    // MARK: - Populate from existing
+    // MARK: - Helpers
+
+    private func priorityColor(_ p: Priority) -> Color {
+        switch p {
+        case .critical: return Color(hex: "#DC2626")
+        case .high:     return Color(hex: "#EA580C")
+        case .medium:   return DS.accent
+        case .low:      return Color(hex: "#059669")
+        }
+    }
 
     private func populate() {
         guard let t = editing else { date = store.selectedDate; return }
@@ -154,9 +261,9 @@ struct TaskFormView: View {
     }
 }
 
-// MARK: - Wheel time picker
+// MARK: - Compact Time Picker
 
-struct WheelTimePicker: View {
+struct CompactTimePicker: View {
     let label: String
     @Binding var h: Int
     @Binding var m: Int
@@ -167,83 +274,128 @@ struct WheelTimePicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .medium)).tracking(0.6).foregroundColor(DS.text3)
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(DS.text3)
             HStack(spacing: 0) {
                 Picker("", selection: $h) {
                     ForEach(hours, id: \.self) { Text("\($0)").tag($0) }
-                }.pickerStyle(.wheel).frame(width: 58, height: 96).clipped()
+                }.pickerStyle(.wheel).frame(width: 50, height: 80).clipped()
 
-                Text(":").font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(DS.text2).padding(.horizontal, 2)
+                Text(":").font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(DS.text2)
 
                 Picker("", selection: $m) {
                     ForEach(minutes, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
-                }.pickerStyle(.wheel).frame(width: 62, height: 96).clipped()
+                }.pickerStyle(.wheel).frame(width: 54, height: 80).clipped()
 
                 Picker("", selection: $pm) {
                     Text("AM").tag(false)
                     Text("PM").tag(true)
-                }.pickerStyle(.wheel).frame(width: 62, height: 96).clipped()
+                }.pickerStyle(.wheel).frame(width: 54, height: 80).clipped()
             }
-            .background(DS.bg2).clipShape(RoundedRectangle(cornerRadius: DS.r8))
+            .background(DS.bg2)
+            .clipShape(RoundedRectangle(cornerRadius: DS.r8))
         }
     }
 }
 
-// MARK: - Tag toggle row
+// MARK: - Flow Tag Picker (replaces per-row toggles)
+
+struct FlowTagPicker: View {
+    @EnvironmentObject var store: AppStore
+    let tags: [TFTag]
+    @Binding var selTags: [TaskTagSel]
+
+    @State private var expandedTag: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.sp10) {
+            // Tag chips row
+            FlowLayout(spacing: 8) {
+                ForEach(tags) { tag in
+                    let isOn = selTags.contains { $0.tagId == tag.id }
+                    Button {
+                        withAnimation(.spring(response: 0.25)) {
+                            if isOn {
+                                selTags.removeAll { $0.tagId == tag.id }
+                                if expandedTag == tag.id { expandedTag = nil }
+                            } else {
+                                selTags.append(TaskTagSel(tagId: tag.id))
+                                if !tag.subtags.isEmpty { expandedTag = tag.id }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(isOn ? Color(hex: tag.colorHex) : DS.border2)
+                                .frame(width: 7, height: 7)
+                            Text(tag.name)
+                                .font(.system(size: 13, weight: isOn ? .semibold : .regular))
+                                .foregroundColor(isOn ? Color(hex: tag.colorHex) : DS.text2)
+                        }
+                        .padding(.horizontal, DS.sp10)
+                        .padding(.vertical, 7)
+                        .background(isOn ? Color(hex: tag.colorHex).opacity(0.1) : DS.bg2)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.r6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DS.r6)
+                                .stroke(isOn ? Color(hex: tag.colorHex).opacity(0.4) : Color.clear, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // Subtag picker for expanded tag
+            ForEach(tags) { tag in
+                let isOn = selTags.contains { $0.tagId == tag.id }
+                if isOn && !tag.subtags.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Subtags for \(tag.name)")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(DS.text3)
+                        FlowLayout(spacing: 6) {
+                            ForEach(tag.subtags) { sub in
+                                let picked = selTags.first(where: { $0.tagId == tag.id })?.subtagIds.contains(sub.id) ?? false
+                                Button {
+                                    guard let i = selTags.firstIndex(where: { $0.tagId == tag.id }) else { return }
+                                    if picked { selTags[i].subtagIds.removeAll { $0 == sub.id } }
+                                    else      { selTags[i].subtagIds.append(sub.id) }
+                                } label: {
+                                    Text(sub.name)
+                                        .font(.system(size: 12, weight: picked ? .semibold : .regular))
+                                        .foregroundColor(picked ? Color(hex: tag.colorHex) : DS.text3)
+                                        .padding(.horizontal, 9).padding(.vertical, 5)
+                                        .background(picked ? Color(hex: tag.colorHex).opacity(0.1) : DS.bg2)
+                                        .clipShape(RoundedRectangle(cornerRadius: DS.r6))
+                                        .overlay(RoundedRectangle(cornerRadius: DS.r6)
+                                            .stroke(picked ? Color(hex: tag.colorHex).opacity(0.3) : Color.clear, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Legacy shims
+
+struct WheelTimePicker: View {
+    let label: String
+    @Binding var h: Int
+    @Binding var m: Int
+    @Binding var pm: Bool
+    var body: some View { CompactTimePicker(label: label, h: $h, m: $m, pm: $pm) }
+}
 
 struct TagToggleRow: View {
     @EnvironmentObject var store: AppStore
     let tag: TFTag
     @Binding var selTags: [TaskTagSel]
-
-    @State private var expanded = false
-
-    var selIdx: Int? { selTags.firstIndex { $0.tagId == tag.id } }
-    var isOn:   Bool { selIdx != nil }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Circle().fill(Color(hex: tag.colorHex)).frame(width: 10, height: 10)
-                Text(tag.name).font(.system(size: 14)).foregroundColor(DS.text)
-                Spacer()
-                if isOn && !tag.subtags.isEmpty {
-                    Button(expanded ? "Less" : "Subtags") { withAnimation { expanded.toggle() } }
-                        .font(.system(size: 12)).foregroundColor(DS.accent)
-                }
-                Toggle("", isOn: Binding(
-                    get: { isOn },
-                    set: { on in
-                        if on { selTags.append(TaskTagSel(tagId: tag.id)) }
-                        else  { selTags.removeAll { $0.tagId == tag.id }; expanded = false }
-                    }
-                )).tint(DS.accent).labelsHidden()
-            }
-            if isOn && expanded && !tag.subtags.isEmpty {
-                ForEach(tag.subtags) { sub in
-                    let picked = selIdx.map { selTags[$0].subtagIds.contains(sub.id) } ?? false
-                    HStack {
-                        Text(sub.name)
-                            .font(.system(size: 13))
-                            .foregroundColor(picked ? Color(hex: tag.colorHex) : DS.text3)
-                            .padding(.leading, 20)
-                        Spacer()
-                        if picked {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(Color(hex: tag.colorHex))
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        guard let i = selIdx else { return }
-                        if picked { selTags[i].subtagIds.removeAll { $0 == sub.id } }
-                        else      { selTags[i].subtagIds.append(sub.id) }
-                    }
-                }
-            }
-        }
-    }
+    var body: some View { EmptyView() }
 }

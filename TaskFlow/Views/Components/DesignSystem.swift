@@ -18,12 +18,14 @@ enum DS {
     static let greenBg   = Color(hex: "#D1FAE5")
     static let red       = Color(hex: "#DC2626")
 
-    static let r6: CGFloat  = 6
-    static let r8: CGFloat  = 8
+    static let r6:  CGFloat = 6
+    static let r8:  CGFloat = 8
+    static let r10: CGFloat = 10
     static let r12: CGFloat = 12
 
     static let sp4:  CGFloat = 4
     static let sp8:  CGFloat = 8
+    static let sp10: CGFloat = 10
     static let sp12: CGFloat = 12
     static let sp16: CGFloat = 16
     static let sp20: CGFloat = 20
@@ -155,16 +157,26 @@ struct HeatCell: View {
 }
 
 // MARK: - EmptyState
+// `icon` is an SF Symbol name (e.g. "checklist", "tag", "target", "chart.bar")
 
 struct EmptyState: View {
     let icon: String; let title: String; let subtitle: String
     var action: (() -> Void)? = nil; var actionLabel = ""
     var body: some View {
-        VStack(spacing: DS.sp12) {
-            Text(icon).font(.system(size: 38))
-            Text(title).font(.system(size: 17, weight: .semibold)).foregroundColor(DS.text2)
-            Text(subtitle).font(.system(size: 13)).foregroundColor(DS.text3)
-                .multilineTextAlignment(.center).frame(maxWidth: 260)
+        VStack(spacing: DS.sp16) {
+            Image(systemName: icon)
+                .font(.system(size: 40, weight: .light))
+                .foregroundColor(DS.border2)
+            VStack(spacing: DS.sp8) {
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(DS.text2)
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundColor(DS.text3)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 260)
+            }
             if let a = action {
                 Button(actionLabel, action: a).buttonStyle(PrimaryBtn())
             }
